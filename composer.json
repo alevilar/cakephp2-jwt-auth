@@ -1,5 +1,5 @@
 {
-    "name": "t73biz/cakephp2-jwt-auth",
+    "name": "alevilar/cakephp2-jwt-auth",
     "type": "cakephp-plugin",
     "description": "Cakephp 2 JWT Authentication",
     "keywords":[
@@ -17,6 +17,10 @@
         },
         {
             "name": "Florian Krämer"
+        },
+        {
+            "name": "Alejandro Vilar",
+            "email": "alevilar@gmail.com"
         }
     ],
     "require": {
