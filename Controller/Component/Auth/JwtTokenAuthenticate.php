@@ -47,7 +47,6 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 	public $settings = array(
 		'fields' => array(
 			'username' => 'username',
-			'token' => 'token'
 		),
 		'parameter' => '_token',
 		'header' => 'X_JSON_WEB_TOKEN',
@@ -70,6 +69,9 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 		if (empty($this->settings['parameter']) && empty($this->settings['header'])) {
 			throw new CakeException(__d('jwt_auth', 'You need to specify token parameter and/or header'));
 		}
+
+		// set pepper with Security.salt
+		$this->settings['pepper'] = Configure::read('Security.salt');
 	}
 
 /**
@@ -83,6 +85,7 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 		return false;
 	}
 
+
 /**
  * Get token information from the request.
  *
@@ -92,8 +95,15 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 	public function getUser(CakeRequest $request) {
 		$token = $this->_getToken($request);
 		if ($token) {
-			return $this->_findUser($token);
+			$usr = $this->_findUser($token);
+			$this->_Collection->getController()->Auth::$sessionKey = false;
+			$login = $this->_Collection->getController()->Auth->login($usr);
+			if ( !$login ) {
+				throw new UnauthorizedException('Invalid user');
+			}
+			return $usr;
 		}
+
 		return false;
 	}
 
@@ -103,11 +113,16 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 	 */
 	private function _getToken(CakeRequest $request)
 	{
-		if (!empty($this->settings['header'])) {
-			$token = $request->header($this->settings['header']);
-			if ($token) {
-				return $token;
-			}
+
+		// Lee el encabezado "Authorization"
+		$authorizationHeader = $request->header('Authorization');
+
+		// Verifica si el encabezado Authorization existe y comienza con "Bearer "
+		if ($authorizationHeader && strpos($authorizationHeader, 'Bearer ') === 0) {
+			// Separa el token JWT del encabezado
+			$jwtToken = substr($authorizationHeader, 7); // Elimina "Bearer "
+	
+			return $jwtToken;
 		}
 
 		if (!empty($this->settings['parameter']) && !empty($request->query[$this->settings['parameter']])) {
@@ -127,6 +142,10 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 	public function _findUser($token, $password = null)
 	{
 		$token = JWT::decode($token, $this->settings['pepper'], array('HS256'));
+		$token = json_decode(json_encode($token), true);
+
+		$token['is_jwt'] = true;
+		return $token;
 
 		if (isset($token->record)) {
 			// Trick to convert object of stdClass to array. Typecasting to
@@ -138,8 +157,8 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 
 		$fields = $this->settings['fields'];
 		$conditions = array(
-			$model . '.' . $fields['username'] => $token->user->name,
-			$model . '.' . $fields['token'] => $token->user->token
+			$model . '.id' => $token->User->id,
+			//$model . '.' . $fields['token'] => $token->user->token
 		);
 
 		if (!empty($this->settings['scope'])) {
@@ -150,14 +169,15 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 			'recursive' => (int)$this->settings['recursive'],
 			'contain' => $this->settings['contain'],
 		));
-
+		
 		if (empty($result) || empty($result[$model])) {
 			return false;
 		}
-
+		
 		$user = $result[$model];
 		unset($result[$model]);
-
-		return array_merge($user, $result);
+		
+		$merge = array_merge($user, $result);
+		return $merge;
 	}
 }
