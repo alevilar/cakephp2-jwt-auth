@@ -96,10 +96,12 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 		$token = $this->_getToken($request);
 		if ($token) {
 			$usr = $this->_findUser($token);
-			$this->_Collection->getController()->Auth::$sessionKey = false;
-			$login = $this->_Collection->getController()->Auth->login($usr);
-			if ( !$login ) {
-				throw new UnauthorizedException('Invalid user');
+			if ( $usr ) {
+				$this->_Collection->getController()->Auth::$sessionKey = false;
+				$login = $this->_Collection->getController()->Auth->login($usr);
+				if ( !$login ) {
+					throw new UnauthorizedException('Invalid user');
+				}
 			}
 			return $usr;
 		}
@@ -143,41 +145,10 @@ class JwtTokenAuthenticate extends BaseAuthenticate
 	{
 		$token = JWT::decode($token, $this->settings['pepper'], array('HS256'));
 		$token = json_decode(json_encode($token), true);
-
-		$token['is_jwt'] = true;
-		return $token;
-
-		if (isset($token->record)) {
-			// Trick to convert object of stdClass to array. Typecasting to
-			// array doesn't convert property values which are themselves objects.
-			return json_decode(json_encode($token->record), true);
+		if ( !empty($token['User']) ) {
+			$token['User']['is_jwt'] = true;
+			return $token['User'];
 		}
-		$userModel = $this->settings['userModel'];
-		list($plugin, $model) = pluginSplit($userModel);
-
-		$fields = $this->settings['fields'];
-		$conditions = array(
-			$model . '.id' => $token->User->id,
-			//$model . '.' . $fields['token'] => $token->user->token
-		);
-
-		if (!empty($this->settings['scope'])) {
-			$conditions = array_merge($conditions, $this->settings['scope']);
-		}
-		$result = ClassRegistry::init($userModel)->find('first', array(
-			'conditions' => $conditions,
-			'recursive' => (int)$this->settings['recursive'],
-			'contain' => $this->settings['contain'],
-		));
-		
-		if (empty($result) || empty($result[$model])) {
-			return false;
-		}
-		
-		$user = $result[$model];
-		unset($result[$model]);
-		
-		$merge = array_merge($user, $result);
-		return $merge;
+		return false;
 	}
 }
